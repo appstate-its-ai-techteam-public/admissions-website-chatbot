@@ -437,7 +437,7 @@ function injectChatbot() {
     }
 }
 
-const ALLOWED_HOSTS = ['admissions.appstate.edu'];
+const ALLOWED_HOSTS = ['admissions.appstate.edu', 'appstate-its-ai-techteam-public.github.io'];
 
 function launchIfAllowed() {
   if (!ALLOWED_HOSTS.includes(window.location.hostname)) {
