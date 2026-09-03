@@ -4,6 +4,47 @@
 const tokenEndpoint = "https://default0f1fb691239348df971c93aa52a956.00.environment.api.powerplatform.com/powervirtualagents/botsbyschema/new_AdmissionsAssistant2/directline/token?api-version=2022-03-01-preview";
 let webChatInstance = null;
 let directLineUrl = null;
+let lastFocusedElement = null; // element to restore focus to when the popup closes
+
+function getFocusableElements(container) {
+  const selector = [
+    'a[href]',
+    'button:not([disabled])',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])'
+  ].join(',');
+  return Array.from(container.querySelectorAll(selector)).filter(
+    (el) => el.offsetParent !== null // exclude hidden/off-screen elements
+  );
+}
+
+function trapFocus(event) {
+  const popup = document.getElementById('chatbot-popup');
+  if (!popup || !popup.classList.contains('visible')) return;
+
+  if (event.key === 'Escape') {
+    hideChat();
+    return;
+  }
+
+  if (event.key !== 'Tab') return;
+
+  const focusable = getFocusableElements(popup);
+  if (focusable.length === 0) return;
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
 
 // Style Options (Copied from your HTML)
 const styleOptions = {"accent":"#04669d","autoScrollSnapOnPage":true,"autoScrollSnapOnPageOffset":0,"avatarBorderRadius":"7%","avatarSize":31,"backgroundColor":"#e8e9eb","botAvatarBackgroundColor":"#ffffff00","botAvatarImage":"https://appstate-its-ai-techteam-public.github.io/admissions-website-chatbot/assets/bot-avatar.png","botAvatarInitials":"A","bubbleAttachmentMaxWidth":480,"bubbleAttachmentMinWidth":250,"bubbleBackground":"#FFFFFF","bubbleBorderColor":"#f5f5f5","bubbleBorderRadius":41,"bubbleBorderStyle":"solid","bubbleBorderWidth":1,"bubbleFromUserBackground":"#F2F2F2","bubbleFromUserBorderColor":"#f5f5f5","bubbleFromUserBorderRadius":41,"bubbleFromUserBorderStyle":"solid","bubbleFromUserBorderWidth":1,"bubbleFromUserNubOffset":0,"bubbleFromUserNubSize":0,"bubbleFromUserTextColor":"#000000","bubbleImageHeight":10,"bubbleImageMaxHeight":240,"bubbleImageMinHeight":240,"bubbleMessageMaxWidth":480,"bubbleMessageMinWidth":120,"bubbleMinHeight":50,"bubbleNubOffset":0,"bubbleTextColor":"#000000","emojiSet":true,"fontSizeSmall":"70%","hideUploadButton":true,"messageActivityWordBreak":"break-word","monospaceFont":"Consolas","paddingRegular":10,"paddingWide":10,"primaryColor":"#ffcc00","primaryFont":null,"sendBoxBackground":"#e8e9eb","sendBoxBorderTop":"solid 1px #808080","sendBoxButtonColor":"#0078d4","sendBoxButtonColorOnHover":"#006cbe","sendBoxButtonShadeBorderRadius":40,"sendBoxButtonShadeColorOnHover":"","sendBoxHeight":60,"sendBoxPlaceholderColor":"#171616","sendBoxTextColor":"#2e2d2d","showAvatarInGroup":"status","spinnerAnimationHeight":16,"spinnerAnimationPadding":12,"spinnerAnimationWidth":16,"subtleColor":"#000000FF","suggestedActionBackgroundColor":"","suggestedActionBackgroundColorOnHover":"","suggestedActionBorderColor":"","suggestedActionBorderRadius":10,"suggestedActionBorderWidth":0,"suggestedActionLayout":"flow","suggestedActionTextColor":"#000000","typingAnimationBackgroundImage":"url('https://appstate-its-ai-techteam-public.github.io/ai-website-chatbot/assets/loading.gif')","typingAnimationDuration":5000,"typingAnimationHeight":30,"typingAnimationWidth":30,"userAvatarBackgroundColor":"#ffffff00","userAvatarImage":"https://appstate-its-ai-techteam-public.github.io/ai-website-chatbot/assets/user-avatar.png","userAvatarInitials":"U"};
@@ -34,8 +75,19 @@ function showChat() {
   const popup = document.getElementById("chatbot-popup");
   const openButton = document.getElementById("open-chat");
   if (popup && openButton) {
+    lastFocusedElement = document.activeElement;
+
     popup.classList.add("visible");
     openButton.classList.add("hidden");
+
+    document.addEventListener("keydown", trapFocus, true);
+
+    // Move focus into the dialog once it's visible. The close button is a
+    // reliable, always-present target; Web Chat's own input renders async.
+    const closeButton = document.getElementById("close-button");
+    if (closeButton) {
+      closeButton.focus();
+    }
   }
 }
 
@@ -45,6 +97,17 @@ function hideChat() {
   if (popup && openButton) {
     popup.classList.remove("visible");
     openButton.classList.remove("hidden");
+
+    document.removeEventListener("keydown", trapFocus, true);
+
+    // Return focus to whatever had it before the dialog opened (normally
+    // the floating chat-launcher button), so keyboard users aren't dropped.
+    if (lastFocusedElement && typeof lastFocusedElement.focus === "function") {
+      lastFocusedElement.focus();
+    } else {
+      openButton.focus();
+    }
+    lastFocusedElement = null;
   }
 }
 
@@ -319,7 +382,7 @@ function injectChatbot() {
 
     // Create the chatbot popup HTML structure
     const chatPopupHtml = `
-      <div id="chatbot-popup" role="complementary" aria-label="Chat Assistant">
+      <div id="chatbot-popup" role="dialog" aria-modal="true" aria-labelledby="chatbot-title">
         <div id="chatbot-header">
           <div class="header-title">
             <svg
@@ -338,7 +401,7 @@ function injectChatbot() {
                 d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
               ></path>
             </svg>
-            <span>Admissions Assistant</span>
+            <span id="chatbot-title">Admissions Assistant</span>
           </div>
           <div class="header-buttons">
             <button
